@@ -8,17 +8,73 @@ GridDB will be used to analyze the factors that influence used car sales because
 
 The dataset, which is in csv format, was obtained from [Kaggle](https://www.kaggle.com/datasets/shubham1kumar/usedcar-data?select=UserCarData.csv). We will see what the data represents later in the Data Analysis section.
 
+**GridDB Setup and Access:**
+
+At first, we need to setup the GridDB access for which the firewall and iptables need to disabled. Next, in a production environment, you should create rules that allow all GridDB ports to run:
+
+```javascript
+$ sudo su -
+# systemctl disable firewalld
+# systemctl stop firewalld
+# iptables -F INPUT
+```
+
+The gs stat command shown above will confirm that GridDB is running on your host. By compiling and running the included sample application, you can ensure that the griddbnode client can connect to GridDB:
+
+```javascript
+$ node UsedCarCode.js 239.0.0.1 31999 your_clustername admin admin
+```
+The documentation and included files assume a clustername of “defaultCluster” and an admin password of “admin.” The above "your_clustername" changes to "myCluster" instead of "defaultCluster" if you use systemctl rather than multicast address and you will need to ensure that ports 10001, 10010, 10020, 20000, and 31999 are accessible from the multicast address or systemctl and any other IP that may connect to GridDB. 
+
+**Necessary Library Installations:**
+
+Since we will be working with different libraries in this article, we will need to install these dependencies to get this code up and running on GridDB. 
+
+All these libraries will be installed using "npm"; therefore, we will install npm first using the command "sudo apt install npm." This makes our life easier as we just now have to run the following commands to install the libraries: 
+
+* For GridDb Node: "npm i griddb-node-api" 
+
+* For Danfojs-Node: "npm i danfojs-node"
+
+* For Parsing csv File: "npm i csv-parse"
+
+* For Writing csv File: "npm i csv-writer"
+
+> **Note:** These libraries will be discussed later in the article.
+
+**Connecting GridDB with Javascript:**
+
+Now that the libraries have been installed, we can use JavaScript to connect to GridDB. It is the same procedure as other packages ("require").
+Here's how you would execute the GridDB connection:
+
+```javascript
+const factory = griddb.StoreFactory.getInstance();
+const store = factory.getStore({
+    "host": '239.0.0.1', // Host Address
+    "port": 31999, // Port Number used to connect and access the cluster
+    "clusterName": "myCluster", // Name of the cluster
+    "username": "admin", // Login details for the database
+    "password": "admin"
+});
+
+```
+The above code is the standard boilerplate code to intialize the cluster but to connect to your GridDB cluster and run the code at the same time, you need to run the code below in the command line:
+
+```javascript
+node UsedCarCode.js 239.0.0.1 31999 myCluster admin admin
+```
+
 **Exporting Dataset into GridDB:**
 
 To begin, we must initialize the GridDB node modules griddb node, danfojs-node, and csv-parser. Griddb node starts the node so we can work on GridDB, Danfojs-node is initialized as a variable, df, which is used in data analysis, and csv-parser will upload our dataset into GridDB by reading the csv file, which is as follows:
 
 ```javascript
-var griddb = require('griddb_node');
+var griddb = require('griddb-node-api'); // Library to initialize and start the griddb node
 
-const dfd = require("danfojs-node")
-const csv = require('csv-parser');
+const dfd = require("danfojs-node") // Library used for data analysis 
+const csv = require('csv-parser'); // Library used to read the input csv file
 const fs = require('fs');
-fs.createReadStream('./Dataset/UserCarData.csv')
+fs.createReadStream('./Dataset/UserCarData.csv') // Reading the csv file
   .pipe(csv())
   .on('data', (row) => {
     lst.push(row);
@@ -29,6 +85,7 @@ fs.createReadStream('./Dataset/UserCarData.csv')
 Following variable initialization, we will generate the GridDB container to create the database schema. In the container, we have to define the data types of columns in our dataset. We can then use the container later to access the stored data, completing our data insertion into the GridDB. 
 
 ```javascript
+// Container below defines the database schema which the GridDB holds
 const conInfo = new griddb.ContainerInfo({
     'name': "usedcaranalysis",
     'columnInfoList': [
@@ -55,7 +112,7 @@ const conInfo = new griddb.ContainerInfo({
     'type': griddb.ContainerType.COLLECTION, 'rowKey': true
 });
 
-/// Inserting Data into GridDB
+/// Inserting Data into GridDB 
 
     for(let i=0;i<lst.length;i++){
 
@@ -67,16 +124,17 @@ const conInfo = new griddb.ContainerInfo({
         .then(() => {
             idx++;
             container.setAutoCommit(false);
-            return container.put([String(idx), lst[i]['Sales_ID'],lst[i]["name"],lst[i]["year"],lst[i]["selling_price"],lst[i]["km_driven"],lst[i]["Region"],lst[i]["State or Province"],lst[i]["City"],lst[i]["fuel"],lst[i]["seller_type"],lst[i]["transmission"],lst[i]["owner"],lst[i]["mileage"],lst[i]["engine"],lst[i]["max_power"],lst[i]["torque"],lst[i]["seats"],lst[i]["sold"]]);
+            return container.put([String(idx), lst[i]['Sales_ID'],lst[i]["name"],lst[i]["year"],lst[i]["selling_price"],lst[i]["km_driven"],lst[i]["Region"],lst[i]["State or Province"],lst[i]["City"],lst[i]["fuel"],lst[i]["seller_type"],lst[i]["transmission"],lst[i]["owner"],lst[i]["mileage"],lst[i]["engine"],lst[i]["max_power"],lst[i]["torque"],lst[i]["seats"],lst[i]["sold"]]); // Looping through each of the columns in the csv file
         })
         .then(() => {
             return container.commit();
-        })      
-        .catch(err => {
+        })
+        // Error handling module
+        .catch(err => { 
             if (err.constructor.name == "GSException") {
                 for (var i = 0; i < err.getErrorStackSize(); i++) {
                     console.log("[", i, "]");
-                    console.log(err.getErrorCode(i));
+                    console.log(err.getErrorCode(i)); 
                     console.log(err.getMessage(i));
                 }
             } else {
@@ -91,13 +149,13 @@ const conInfo = new griddb.ContainerInfo({
 Since we've already saved all of our data in the container, all we have to do now is retrieve it using TQL, GridDB's SQL-like query language. So, to begin, we will construct a container for the retrieved data, named obtained_data. The next step is to extract the rows in the column order, named query, and save them in a data frame, named df, for data visualization and analysis, completing our data import.
 
 ```javascript
-# Get the containers
+// Get the containers
 obtained_data = gridstore.get_container("usedcaranalysis")
     
-# Fetch all rows - language_tag_container
+// Fetch all rows - language_tag_container
 query = obtained_data.query("select *")
 
-# Creating Data Frame variable
+// Creating Data Frame variable for data visualization
 let df = await dfd.readCSV("./out.csv")
 ```
 
@@ -168,7 +226,7 @@ To summarise, all of the above factors determine the selling price of a specific
 
 
 ```javascript
-## Scatter Plot between engine and max_power
+// Scatter Plot between engine and max_power
 let cols = [...cols]
 cols.pop('engine')
 let data = [{
@@ -193,7 +251,7 @@ The plot for two columns engine and max_power is below:
 The plot above shows that the two variables have a positive linear relationship with other, which means that the greater the engine size, the greater the power by the engine which should make sense.
 
 ```javascript
-## Scatter Plot between km_driven and selling_price
+// Scatter Plot between km_driven and selling_price
 let cols = [...cols]
 cols.pop('year')
 let data = [{
@@ -222,7 +280,7 @@ Using a bar chart, let's look at the car manufacturers and see who has the most 
 **Bar Chart:**
 
 ```javascript
-## Distribution of Column Values
+// Distribution of Column Values
 const { Plotly } = require('node-kernel');
 let cols = df.columns
 for(let i = 0; i < cols.length; i++)
