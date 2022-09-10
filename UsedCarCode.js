@@ -1,4 +1,4 @@
-var griddb = require('griddb_node');
+var griddb = require('griddb-node-api');
 
 const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 const csvWriter = createCsvWriter({
